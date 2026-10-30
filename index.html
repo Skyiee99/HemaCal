@@ -47,10 +47,17 @@
       </div>
 
       <div class="header-actions">
+        <!-- History Records Button -->
+        <button id="btn-open-history" class="btn-history-trigger" title="ประวัติการบันทึกและคำนวณผลเลือด">
+          <span class="history-icon" aria-hidden="true">📜</span>
+          <span>ประวัติกรอก</span>
+          <span class="history-badge" id="history-badge">0</span>
+        </button>
+
         <!-- API Key Status Pill -->
         <button id="btn-open-api-modal" class="btn-api-status" title="คลิกเพื่อตั้งค่า Gemini API Key">
-          <span class="api-dot" id="api-status-dot"></span>
-          <span id="api-status-text">ตั้งค่า Gemini API</span>
+          <span class="api-dot connected" id="api-status-dot"></span>
+          <span id="api-status-text">Gemini API (ระบบกลาง)</span>
           <span class="key-icon" aria-hidden="true">🔑</span>
         </button>
 
@@ -430,7 +437,7 @@
               <div>
                 <div class="ai-title-row">
                   <h3 class="card-title">บทวิเคราะห์ทางโลหิตวิทยาโดย Gemini AI</h3>
-                  <span class="model-badge" id="active-model-badge">Gemini 3.8 Flash</span>
+                  <span class="model-badge" id="active-model-badge">Gemini 3.5 Flash Lite</span>
                 </div>
                 <p class="card-desc">วิเคราะห์สาเหตุ โรคที่อาจสัมพันธ์ พร้อมแนะนำการตรวจทางห้องปฏิบัติการเพิ่มเติม</p>
               </div>
@@ -582,36 +589,122 @@
                 👁️
               </button>
             </div>
-            <span class="form-hint">หากเว้นว่างไว้ ระบบจะใช้โหมด Offline Hematology Expert วิเคราะห์ให้โดยอัตโนมัติ</span>
+            <span class="form-hint">มี API กลางบน Vercel ให้บริการพร้อมใช้งาน หากต้องการใช้โควต้าส่วนตัวสามารถใส่ API Key ของคุณเองได้</span>
           </div>
 
           <div class="form-group">
             <label for="modal-select-model" class="form-label">โมเดล AI ที่ต้องการใช้งาน</label>
             <select id="modal-select-model" class="form-control select-control">
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash (แนะนำล่าสุด - ประสิทธิภาพและตรรกะสูงสุด)</option>
-              <option value="gemini-3.6-flash">Gemini 3.6 Flash (ประมวลผลเร็วพิเศษ)</option>
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (เร็ว เบา ประหยัดโทเคน)</option>
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (วิเคราะห์เชิงลึก)</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (เร็ว เบา ประหยัดโควต้า - แนะนำ)</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash (ประมวลผลเร็วพิเศษ ตรรกะสูง)</option>
             </select>
           </div>
 
           <div class="api-modal-info">
             <div class="info-badge-row">
               <span class="info-badge-icon">🔒</span>
-              <p>คีย์ของคุณจะถูกเก็บไว้เฉพาะในเบราว์เซอร์ของคุณเท่านั้น ไม่มีการส่งไปเก็บบนเซิร์ฟเวอร์ภายนอกใดๆ ทั้งสิ้น</p>
+              <p>ระบบเชื่อมต่อกับ Gemini API กลางของระบบอัตโนมัติ หากระบุคีย์ส่วนตัว คีย์จะถูกเก็บไว้เฉพาะใน LocalStorage เบราว์เซอร์ของคุณเท่านั้น</p>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" id="btn-clear-api-key" class="btn btn-danger-outline">ลบคีย์ออกจากเครื่อง</button>
+          <button type="button" id="btn-clear-api-key" class="btn btn-danger-outline">ลบคีย์ส่วนตัว</button>
           <div class="modal-footer-right">
             <button type="button" class="btn btn-secondary" id="btn-cancel-api-modal">ยกเลิก</button>
             <button type="button" class="btn btn-primary" id="btn-save-api-key">บันทึกการตั้งค่า</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Quota Exceeded Warning Modal -->
+    <div class="modal-backdrop" id="quota-modal" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-header quota-warning-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">⚠️</span>
+            <div>
+              <h3 class="modal-title">โควต้า Gemini API กลางหมดชั่วคราว</h3>
+              <p class="modal-subtitle">Gemini API Quota / Rate Limit Exceeded</p>
+            </div>
+          </div>
+          <button type="button" class="btn-close-modal" id="btn-close-quota-modal" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="quota-alert-box">
+            <p><strong>โควต้าของ Gemini API ส่วนกลางบน Vercel ถึงขีดจำกัดชั่วคราว</strong> (429 Rate Limit)</p>
+            <p class="quota-desc">ท่านยังคงสามารถรับผลการวิเคราะห์และคำแนะนำทางโลหิตวิทยาได้อย่างครบถ้วนผ่านตัวเลือกด้านล่างนี้:</p>
+          </div>
+
+          <div class="quota-options-list">
+            <button type="button" class="quota-option-btn primary" id="btn-quota-use-offline">
+              <div class="quota-option-icon">🩺</div>
+              <div class="quota-option-text">
+                <strong>ใช้บทวิเคราะห์ผู้เชี่ยวชาญโลหิตวิทยา (Offline Expert)</strong>
+                <span>วินิจฉัยแยกโรค แปลผลสัณฐาน และแนะนำแล็บเพิ่มเติมได้ทันที ไม่ต้องพึ่งพา API</span>
+              </div>
+              <span class="quota-option-badge">แนะนำทันที</span>
+            </button>
+
+            <button type="button" class="quota-option-btn" id="btn-quota-try-lite">
+              <div class="quota-option-icon">⚡</div>
+              <div class="quota-option-text">
+                <strong>สลับใช้โมเดล Gemini 3.5 Flash Lite</strong>
+                <span>โมเดลขนาดเล็ก ประหยัดโทเคน และอาจมีโควต้าพร้อมให้บริการ</span>
+              </div>
+            </button>
+
+            <button type="button" class="quota-option-btn" id="btn-quota-open-key-modal">
+              <div class="quota-option-icon">🔑</div>
+              <div class="quota-option-text">
+                <strong>ใส่ Gemini API Key ส่วนตัว</strong>
+                <span>ใช้โควต้าอิสระของคุณเองจาก Google AI Studio</span>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-dismiss-quota">ปิดหน้าต่างแจ้งเตือน</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patient & Calculation History Modal -->
+    <div class="modal-backdrop" id="history-modal" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-lg">
+        <div class="modal-header">
+          <div class="modal-title-with-icon">
+            <span class="modal-icon">📜</span>
+            <div>
+              <h3 class="modal-title">ประวัติการบันทึกข้อมูลและคำนวณผลเลือด</h3>
+              <p class="modal-subtitle">บันทึกอัตโนมัติในเบราว์เซอร์ (LocalStorage) ไม่สูญหายเมื่อรีเฟรชหน้าเว็บ</p>
+            </div>
+          </div>
+          <button type="button" class="btn-close-modal" id="btn-close-history-modal" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="history-toolbar">
+            <span id="history-total-label" class="history-total-text">พบประวัติ 0 รายการ</span>
+            <div class="history-actions-group">
+              <button type="button" id="btn-export-history" class="btn-sm btn-ghost" title="ดาวน์โหลดประวัติเป็นไฟล์ JSON">
+                📥 ส่งออก JSON
+              </button>
+              <button type="button" id="btn-clear-all-history" class="btn-sm btn-danger-outline" title="ล้างประวัติการตรวจทั้งหมด">
+                🗑️ ล้างทั้งหมด
+              </button>
+            </div>
+          </div>
+
+          <!-- History items list container -->
+          <div class="history-list" id="history-list-container">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-close-history-footer">ปิดหน้าต่าง</button>
+        </div>
+      </div>
+    </div>
       </div>
     </div>
 

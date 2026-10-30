@@ -1,8 +1,7 @@
 {
-  "name": "valentine",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "hemacalc-ai",
+  "version": "2.5.0",
+  "description": "ระบบคำนวณและแปลผลค่าดัชนีเม็ดเลือดแดง (RBC Indices Analyzer) พร้อม AI ที่ปรึกษาโลหิตวิทยา",
   "type": "module",
   "scripts": {
     "dev": "vite",

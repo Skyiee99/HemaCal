@@ -4,16 +4,11 @@
 
 const STORAGE_KEY_API = 'gemini_api_key_hematology';
 const STORAGE_KEY_MODEL = 'gemini_selected_model';
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 export const AVAILABLE_MODELS = [
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (แนะนำล่าสุด - ประสิทธิภาพและตรรกะสูงสุด)' },
-  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (ประมวลผลเร็วพิเศษ)' },
-  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite (เร็ว เบา ประหยัดโทเคน)' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (เสถียรและเร็วสูง)' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (มาตรฐาน)' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (วิเคราะห์เชิงลึก)' }
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite (เร็ว เบา ประหยัดโควต้า - แนะนำ)' },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (ประมวลผลเร็วพิเศษ ตรรกะสูง)' }
 ];
 
 export function getStoredApiKey() {
@@ -29,11 +24,14 @@ export function saveStoredApiKey(key) {
 }
 
 export function getStoredModel() {
-  return localStorage.getItem(STORAGE_KEY_MODEL) || DEFAULT_MODEL;
+  const stored = localStorage.getItem(STORAGE_KEY_MODEL);
+  const isValid = AVAILABLE_MODELS.some(m => m.id === stored);
+  return isValid ? stored : DEFAULT_MODEL;
 }
 
 export function saveStoredModel(model) {
-  localStorage.setItem(STORAGE_KEY_MODEL, model);
+  const isValid = AVAILABLE_MODELS.some(m => m.id === model);
+  localStorage.setItem(STORAGE_KEY_MODEL, isValid ? model : DEFAULT_MODEL);
 }
 
 /**
@@ -81,69 +79,58 @@ export function buildHematologyPrompt(calcData) {
 }
 
 /**
- * Sends prompt to Google Gemini API
+ * Sends prompt to Gemini API via central Vercel Serverless Function (/api/gemini)
+ * Falls back to user custom key if provided
  */
-export async function consultGeminiAPI(calcData, apiKey, model = DEFAULT_MODEL) {
-  if (!apiKey) {
-    throw new Error('ไม่พบ API Key ของ Gemini กรุณาคลิกปุ่ม "ตั้งค่า API Key" เพื่อใส่คีย์ของคุณ');
+export async function consultGeminiAPI(calcData, userApiKey = '', model = DEFAULT_MODEL) {
+  let response;
+  try {
+    response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        calcData,
+        model,
+        userApiKey: userApiKey ? userApiKey.trim() : undefined
+      })
+    });
+  } catch (netErr) {
+    throw new Error(`ไม่สามารถเชื่อมต่อไปยังเซิร์ฟเวอร์ได้ (${netErr.message})`);
   }
 
-  const promptText = buildHematologyPrompt(calcData);
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
-
-  const payload = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: promptText }]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      topP: 0.95,
-      maxOutputTokens: 2500
-    }
-  };
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
+  let resData = null;
+  try {
+    resData = await response.json();
+  } catch {
+    // Non-JSON response
+  }
 
   if (!response.ok) {
-    let errorDetail = '';
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson?.error?.message || response.statusText;
-    } catch {
-      errorDetail = response.statusText;
-    }
-
-    if (response.status === 400 || response.status === 403) {
-      throw new Error(`API Key ไม่ถูกต้อง หรือไม่มีสิทธิ์เข้าถึงโมเดล (${errorDetail})`);
-    } else if (response.status === 429) {
-      throw new Error(`เกินขีดจำกัดการใช้งาน API (Quota Exceeded) กรุณารอสักครู่แล้วลองใหม่`);
-    } else {
-      throw new Error(`การเชื่อมต่อ Gemini API ล้มเหลว (${response.status}): ${errorDetail}`);
-    }
+    const isQuota = response.status === 429 || resData?.error === 'QUOTA_EXCEEDED';
+    const message = resData?.message || response.statusText || 'เกิดข้อผิดพลาดในการเรียกใช้ API';
+    const err = new Error(message);
+    err.status = response.status;
+    err.isQuotaExceeded = isQuota;
+    err.details = resData;
+    throw err;
   }
 
-  const data = await response.json();
-  const candidate = data?.candidates?.[0];
-
-  if (!candidate || !candidate.content?.parts?.[0]?.text) {
-    throw new Error('ไม่ได้รับข้อความตอบกลับจากโมเดล Gemini');
+  if (!resData || !resData.analysis) {
+    throw new Error('ไม่ได้รับข้อมูลบทวิเคราะห์จากโมเดล Gemini');
   }
 
-  return candidate.content.parts[0].text;
+  return {
+    text: resData.analysis,
+    model: resData.model || model,
+    source: resData.source || 'central_api'
+  };
 }
 
 /**
  * Offline Expert Hematology Diagnostic Engine
- * Provides immediate high-value clinical interpretation when API key is not yet configured or offline
+ * Provides immediate high-value clinical interpretation when API is unavailable or quota is exceeded
  */
 export function generateOfflineExpertAnalysis(calcData) {
   const { inputs, indices, demoRef, evaluations, morphology } = calcData;

@@ -9,9 +9,21 @@ import {
   getStoredModel, 
   saveStoredModel, 
   AVAILABLE_MODELS,
+  DEFAULT_MODEL,
   consultGeminiAPI, 
   generateOfflineExpertAnalysis 
 } from './gemini-api.js';
+import {
+  saveFormDraft,
+  loadFormDraft,
+  clearFormDraft,
+  getCalculationHistory,
+  saveCalculationToHistory,
+  updateHistoryAiAnalysis,
+  deleteHistoryItem,
+  clearAllHistory,
+  exportHistoryAsJSON
+} from './history-storage.js';
 import { marked } from 'marked';
 
 // Configure marked options
@@ -22,8 +34,9 @@ marked.setOptions({
 
 // App State
 let currentCalculation = null;
+let currentCalculationId = null;
 
-// DOM Elements
+// DOM Elements: Form
 const form = document.getElementById('rbc-form');
 const radioHbCalculated = document.getElementById('hb-mode-calculated');
 const radioHbDirect = document.getElementById('hb-mode-direct');
@@ -83,11 +96,31 @@ const btnFormulaInfo = document.getElementById('btn-formula-info');
 const btnCloseFormula = document.getElementById('btn-close-formula');
 const btnOkFormula = document.getElementById('btn-ok-formula');
 
+// Quota Modal Elements
+const quotaModal = document.getElementById('quota-modal');
+const btnCloseQuotaModal = document.getElementById('btn-close-quota-modal');
+const btnDismissQuota = document.getElementById('btn-dismiss-quota');
+const btnQuotaUseOffline = document.getElementById('btn-quota-use-offline');
+const btnQuotaTryLite = document.getElementById('btn-quota-try-lite');
+const btnQuotaOpenKeyModal = document.getElementById('btn-quota-open-key-modal');
+
+// History Elements
+const btnOpenHistory = document.getElementById('btn-open-history');
+const historyBadge = document.getElementById('history-badge');
+const historyModal = document.getElementById('history-modal');
+const btnCloseHistoryModal = document.getElementById('btn-close-history-modal');
+const btnCloseHistoryFooter = document.getElementById('btn-close-history-footer');
+const historyTotalLabel = document.getElementById('history-total-label');
+const historyListContainer = document.getElementById('history-list-container');
+const btnExportHistory = document.getElementById('btn-export-history');
+const btnClearAllHistory = document.getElementById('btn-clear-all-history');
+
+// Other Controls
 const btnThemeToggle = document.getElementById('btn-theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 const btnReset = document.getElementById('btn-reset');
 const btnCopyReport = document.getElementById('btn-copy-report');
-const btnPrintReport = document.getElementById('btn-print-report');
+const btnPrintReport = document.getElementById('btnPrintReport') || document.getElementById('btn-print-report');
 
 // Clinical Presets Data
 const PRESETS = {
@@ -155,10 +188,8 @@ function init() {
   setupEventListeners();
   updateApiStatusUI();
   initTheme();
-  handleSexChange();
-  setHemoglobinMode();
-  updateHemoglobinPreview();
-  updateRbcConversionPreview();
+  updateHistoryBadge();
+  restoreFormDraft();
 }
 
 /* ==========================================================================
@@ -167,32 +198,58 @@ function init() {
 
 function setupEventListeners() {
   // Hemoglobin input mode
-  radioHbCalculated.addEventListener('change', setHemoglobinMode);
-  radioHbDirect.addEventListener('change', setHemoglobinMode);
+  radioHbCalculated.addEventListener('change', () => {
+    setHemoglobinMode();
+    triggerDraftSave();
+  });
+  radioHbDirect.addEventListener('change', () => {
+    setHemoglobinMode();
+    triggerDraftSave();
+  });
 
-  // Live Hemoglobin calculation/input preview
-  inputHbAbs.addEventListener('input', updateHemoglobinPreview);
-  inputHbFactor.addEventListener('input', updateHemoglobinPreview);
-  inputHbDirect.addEventListener('input', updateHemoglobinPreview);
+  // Live Hemoglobin calculation/input preview & draft autosave
+  inputHbAbs.addEventListener('input', () => {
+    updateHemoglobinPreview();
+    triggerDraftSave();
+  });
+  inputHbFactor.addEventListener('input', () => {
+    updateHemoglobinPreview();
+    triggerDraftSave();
+  });
+  inputHbDirect.addEventListener('input', () => {
+    updateHemoglobinPreview();
+    triggerDraftSave();
+  });
 
-  // Live RBC Count conversion as user types
-  inputRbcCount.addEventListener('input', updateRbcConversionPreview);
+  // Live RBC Count conversion as user types & draft autosave
+  inputRbcCount.addEventListener('input', () => {
+    updateRbcConversionPreview();
+    triggerDraftSave();
+  });
 
-  // Sex toggle change
-  radioSexMale.addEventListener('change', handleSexChange);
-  radioSexFemale.addEventListener('change', handleSexChange);
+  // Demographics change & draft autosave
+  inputAge.addEventListener('input', triggerDraftSave);
+  radioSexMale.addEventListener('change', () => {
+    handleSexChange();
+    triggerDraftSave();
+  });
+  radioSexFemale.addEventListener('change', () => {
+    handleSexChange();
+    triggerDraftSave();
+  });
+  checkPregnancy.addEventListener('change', triggerDraftSave);
 
   // Form Submission
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    performCalculation();
+    performCalculation(true);
   });
 
   // Quick AI button in form
   btnQuickAi.addEventListener('click', () => {
     if (!currentCalculation) {
       if (form.checkValidity()) {
-        performCalculation();
+        performCalculation(true);
       } else {
         form.reportValidity();
         return;
@@ -221,7 +278,7 @@ function setupEventListeners() {
     });
   });
 
-  // Modals
+  // API Modal
   btnOpenApiModal.addEventListener('click', openApiModal);
   btnCloseApiModal.addEventListener('click', closeApiModal);
   btnCancelApiModal.addEventListener('click', closeApiModal);
@@ -229,22 +286,127 @@ function setupEventListeners() {
   btnClearApiKey.addEventListener('click', clearApiKey);
   btnToggleKeyVisibility.addEventListener('click', toggleKeyVisibility);
 
+  // Formula Modal
   btnFormulaInfo.addEventListener('click', () => formulaModal.classList.add('active'));
   btnCloseFormula.addEventListener('click', () => formulaModal.classList.remove('active'));
   btnOkFormula.addEventListener('click', () => formulaModal.classList.remove('active'));
+
+  // Quota Warning Modal
+  if (btnCloseQuotaModal) btnCloseQuotaModal.addEventListener('click', closeQuotaModal);
+  if (btnDismissQuota) btnDismissQuota.addEventListener('click', closeQuotaModal);
+  if (btnQuotaUseOffline) {
+    btnQuotaUseOffline.addEventListener('click', () => {
+      closeQuotaModal();
+      if (currentCalculation) {
+        showToast('สลับใช้บทวิเคราะห์ผู้เชี่ยวชาญโลหิตวิทยา (Offline Expert)', 'info');
+        renderOfflineAnalysisDirectly();
+      }
+    });
+  }
+  if (btnQuotaTryLite) {
+    btnQuotaTryLite.addEventListener('click', () => {
+      closeQuotaModal();
+      saveStoredModel('gemini-3.5-flash-lite');
+      updateApiStatusUI();
+      showToast('เปลี่ยนเป็น Gemini 3.5 Flash Lite แล้ว กำลังลองวิเคราะห์ใหม่...', 'info');
+      triggerAIAnalysis();
+    });
+  }
+  if (btnQuotaOpenKeyModal) {
+    btnQuotaOpenKeyModal.addEventListener('click', () => {
+      closeQuotaModal();
+      openApiModal();
+    });
+  }
+
+  // History Modal
+  if (btnOpenHistory) btnOpenHistory.addEventListener('click', openHistoryModal);
+  if (btnCloseHistoryModal) btnCloseHistoryModal.addEventListener('click', closeHistoryModal);
+  if (btnCloseHistoryFooter) btnCloseHistoryFooter.addEventListener('click', closeHistoryModal);
+  if (btnExportHistory) btnExportHistory.addEventListener('click', exportHistoryAsJSON);
+  if (btnClearAllHistory) {
+    btnClearAllHistory.addEventListener('click', () => {
+      if (confirm('คุณต้องการลบประวัติการคำนวณทั้งหมดออกจากเครื่องใช่หรือไม่?')) {
+        clearAllHistory();
+        renderHistoryList();
+        updateHistoryBadge();
+        showToast('ลบประวัติทั้งหมดเรียบร้อยแล้ว', 'info');
+      }
+    });
+  }
 
   // Theme Toggle
   btnThemeToggle.addEventListener('click', toggleTheme);
 
   // Copy & Print
   btnCopyReport.addEventListener('click', copyReportToClipboard);
-  btnPrintReport.addEventListener('click', () => window.print());
+  if (btnPrintReport) btnPrintReport.addEventListener('click', () => window.print());
 
   // Close modals on clicking outside dialog
   window.addEventListener('click', (e) => {
     if (e.target === apiModal) closeApiModal();
     if (e.target === formulaModal) formulaModal.classList.remove('active');
+    if (e.target === quotaModal) closeQuotaModal();
+    if (e.target === historyModal) closeHistoryModal();
   });
+}
+
+/* ==========================================================================
+   Draft Autosave & Restore
+   ========================================================================== */
+
+let draftTimer = null;
+function triggerDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    const isDirect = radioHbDirect.checked;
+    saveFormDraft({
+      hbMode: isDirect ? 'direct' : 'calculated',
+      hbAbs: inputHbAbs.value,
+      hbFactor: inputHbFactor.value,
+      hbDirect: inputHbDirect.value,
+      hct: inputHct.value,
+      rbcRawCount: inputRbcCount.value,
+      age: inputAge.value,
+      sex: radioSexFemale.checked ? 'female' : 'male',
+      isPregnant: checkPregnancy.checked
+    });
+  }, 400);
+}
+
+function restoreFormDraft() {
+  const draft = loadFormDraft();
+  if (!draft) return;
+
+  if (draft.hbMode === 'direct') {
+    radioHbDirect.checked = true;
+    radioHbCalculated.checked = false;
+  } else {
+    radioHbCalculated.checked = true;
+    radioHbDirect.checked = false;
+  }
+
+  if (draft.hbAbs !== undefined) inputHbAbs.value = draft.hbAbs;
+  if (draft.hbFactor !== undefined) inputHbFactor.value = draft.hbFactor;
+  if (draft.hbDirect !== undefined) inputHbDirect.value = draft.hbDirect;
+  if (draft.hct !== undefined) inputHct.value = draft.hct;
+  if (draft.rbcRawCount !== undefined) inputRbcCount.value = draft.rbcRawCount;
+  if (draft.age !== undefined) inputAge.value = draft.age;
+
+  if (draft.sex === 'female') {
+    radioSexFemale.checked = true;
+    radioSexMale.checked = false;
+  } else {
+    radioSexMale.checked = true;
+    radioSexFemale.checked = false;
+  }
+
+  checkPregnancy.checked = Boolean(draft.isPregnant);
+
+  setHemoglobinMode();
+  handleSexChange();
+  updateHemoglobinPreview();
+  updateRbcConversionPreview();
 }
 
 /* ==========================================================================
@@ -315,7 +477,6 @@ function loadPreset(key) {
   const preset = PRESETS[key];
   if (!preset) return;
 
-  // Preserve the preset's Hb result using Abs × Factor (Factor = 1).
   radioHbCalculated.checked = true;
   radioHbDirect.checked = false;
   setHemoglobinMode();
@@ -337,11 +498,12 @@ function loadPreset(key) {
   checkPregnancy.checked = Boolean(preset.isPregnant);
   updateHemoglobinPreview();
   updateRbcConversionPreview();
+  triggerDraftSave();
 
   showToast(`โหลดเคสตัวอย่าง: ${preset.name}`, 'info');
 
-  // Automatically calculate
-  performCalculation();
+  // Automatically calculate and record
+  performCalculation(true);
 }
 
 function resetForm() {
@@ -352,7 +514,9 @@ function resetForm() {
   setHemoglobinMode();
   handleSexChange();
   updateRbcConversionPreview();
+  clearFormDraft();
   currentCalculation = null;
+  currentCalculationId = null;
 
   emptyStateView.style.display = 'block';
   activeResultsView.style.display = 'none';
@@ -371,7 +535,7 @@ function resetForm() {
    Calculation & Results Rendering
    ========================================================================== */
 
-function performCalculation() {
+function performCalculation(saveHistory = true) {
   const { hb, hbAbs, hbFactor, hbMode } = getHemoglobinValues();
   const hct = inputHct.value;
   const rbcRawCount = inputRbcCount.value;
@@ -395,6 +559,14 @@ function performCalculation() {
     currentCalculation = result;
     renderResults(result);
 
+    if (saveHistory) {
+      const saved = saveCalculationToHistory(result);
+      if (saved) {
+        currentCalculationId = saved.id;
+        updateHistoryBadge();
+      }
+    }
+
     // Scroll slightly to results if on mobile
     if (window.innerWidth <= 1080) {
       document.getElementById('results-card').scrollIntoView({ behavior: 'smooth' });
@@ -406,13 +578,6 @@ function performCalculation() {
   }
 }
 
-/**
- * Calculates position for visual meter gauge
- * @param {number} value 
- * @param {number} min 
- * @param {number} max 
- * @returns {number} percentage (5% to 95%)
- */
 function calculateGaugePosition(value, min, max) {
   const spread = max - min;
   const lowerBound = min - spread * 0.45;
@@ -570,27 +735,33 @@ async function triggerAIAnalysis() {
   try {
     let markdownResponse = '';
 
-    if (apiKey) {
-      // Connect to Live Gemini API
-      try {
-        markdownResponse = await consultGeminiAPI(currentCalculation, apiKey, model);
-        showToast('รับบทวิเคราะห์จาก Gemini API สำเร็จ', 'success');
-      } catch (apiErr) {
-        console.warn('Gemini API call failed, falling back to expert hematology engine:', apiErr);
+    try {
+      const result = await consultGeminiAPI(currentCalculation, apiKey, model);
+      markdownResponse = result.text;
+      const sourceLabel = result.source === 'custom_key' ? 'คีย์ส่วนตัว' : 'ระบบกลาง Vercel';
+      showToast(`รับบทวิเคราะห์จาก Gemini API (${sourceLabel}) สำเร็จ`, 'success');
+    } catch (apiErr) {
+      console.warn('Gemini API call failed:', apiErr);
+
+      if (apiErr.isQuotaExceeded) {
+        openQuotaModal();
+        showToast('โควต้า Gemini API กลางหมดชั่วคราว (Quota Exceeded)', 'error');
+        markdownResponse = generateOfflineExpertAnalysis(currentCalculation);
+      } else {
         showToast(`Gemini API: ${apiErr.message} (สลับใช้บทวิเคราะห์ผู้เชี่ยวชาญ)`, 'error');
         markdownResponse = generateOfflineExpertAnalysis(currentCalculation);
       }
-    } else {
-      // Use Offline Expert Hematology Engine
-      await new Promise(r => setTimeout(r, 600)); // Smooth UX transition
-      markdownResponse = generateOfflineExpertAnalysis(currentCalculation);
-      showToast('สร้างบทวิเคราะห์จาก Hematology Expert Engine สำเร็จ', 'info');
     }
 
     // Render Markdown
     aiMarkdownOutput.innerHTML = marked.parse(markdownResponse);
     aiLoadingView.style.display = 'none';
     aiMarkdownOutput.style.display = 'block';
+
+    // Update history record if one exists
+    if (currentCalculationId) {
+      updateHistoryAiAnalysis(currentCalculationId, markdownResponse);
+    }
 
     // Scroll into view
     aiMarkdownOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -601,6 +772,258 @@ async function triggerAIAnalysis() {
   } finally {
     btnTriggerAi.disabled = false;
   }
+}
+
+function renderOfflineAnalysisDirectly() {
+  if (!currentCalculation) return;
+
+  const markdownResponse = generateOfflineExpertAnalysis(currentCalculation);
+  aiPlaceholderView.style.display = 'none';
+  aiLoadingView.style.display = 'none';
+  aiMarkdownOutput.innerHTML = marked.parse(markdownResponse);
+  aiMarkdownOutput.style.display = 'block';
+
+  if (currentCalculationId) {
+    updateHistoryAiAnalysis(currentCalculationId, markdownResponse);
+  }
+
+  aiMarkdownOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* ==========================================================================
+   Quota Warning Modal
+   ========================================================================== */
+
+function openQuotaModal() {
+  if (quotaModal) quotaModal.classList.add('active');
+}
+
+function closeQuotaModal() {
+  if (quotaModal) quotaModal.classList.remove('active');
+}
+
+/* ==========================================================================
+   History Modal & Management
+   ========================================================================== */
+
+function updateHistoryBadge() {
+  const history = getCalculationHistory();
+  if (historyBadge) {
+    historyBadge.textContent = history.length;
+    historyBadge.style.display = history.length > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+function openHistoryModal() {
+  renderHistoryList();
+  if (historyModal) historyModal.classList.add('active');
+}
+
+function closeHistoryModal() {
+  if (historyModal) historyModal.classList.remove('active');
+}
+
+function renderHistoryList() {
+  const history = getCalculationHistory();
+  if (historyTotalLabel) {
+    historyTotalLabel.textContent = `พบประวัติ ${history.length} รายการ`;
+  }
+
+  if (!historyListContainer) return;
+
+  if (history.length === 0) {
+    historyListContainer.innerHTML = `
+      <div class="history-empty">
+        <div class="history-empty-icon">📂</div>
+        <p><strong>ยังไม่มีประวัติการคำนวณ</strong></p>
+        <span class="history-empty-hint">เมื่อคุณกด "คำนวณและแปลผล" ระบบจะบันทึกข้อมูลผลเลือดไว้ที่นี่อัตโนมัติ</span>
+      </div>
+    `;
+    return;
+  }
+
+  historyListContainer.innerHTML = history.map(item => {
+    const { inputs, indices, morphology, displayDate, id, aiAnalysis } = item;
+    const sexText = inputs.sex === 'female' 
+      ? (inputs.isPregnant ? 'หญิง (ตั้งครรภ์)' : 'หญิง')
+      : 'ชาย';
+
+    const hbModeText = inputs.hbMode === 'direct' ? 'กรอกตรง' : 'Abs×Factor';
+
+    return `
+      <div class="history-card" data-id="${id}">
+        <div class="history-card-header">
+          <div class="history-time">
+            <span>📅 ${displayDate || 'ไม่ระบุวัน'}</span>
+          </div>
+          <span class="history-patient-pill">เพศ${sexText} | อายุ ${inputs.age} ปี (${hbModeText})</span>
+        </div>
+
+        <div class="history-grid-values">
+          <div class="history-val-item">
+            <span class="history-val-label">Hb</span>
+            <span class="history-val-number">${inputs.hb ? Number(inputs.hb).toFixed(1) : '-'}</span>
+          </div>
+          <div class="history-val-item">
+            <span class="history-val-label">Hct</span>
+            <span class="history-val-number">${inputs.hct ? Number(inputs.hct).toFixed(1) : '-'}%</span>
+          </div>
+          <div class="history-val-item">
+            <span class="history-val-label">RBC</span>
+            <span class="history-val-number">${inputs.rbcConverted ? Number(inputs.rbcConverted).toFixed(2) : '-'}</span>
+          </div>
+          <div class="history-val-item">
+            <span class="history-val-label">MCV</span>
+            <span class="history-val-number">${indices.mcv ? Number(indices.mcv).toFixed(1) : '-'}</span>
+          </div>
+          <div class="history-val-item">
+            <span class="history-val-label">MCH</span>
+            <span class="history-val-number">${indices.mch ? Number(indices.mch).toFixed(1) : '-'}</span>
+          </div>
+          <div class="history-val-item">
+            <span class="history-val-label">MCHC</span>
+            <span class="history-val-number">${indices.mchc ? Number(indices.mchc).toFixed(1) : '-'}</span>
+          </div>
+        </div>
+
+        <div class="history-tags-row">
+          <span class="history-tag">${morphology.morphologyLabelTh || 'ประเมินสัณฐาน'}</span>
+          <span class="history-tag mentzer">Mentzer: ${indices.mentzerIndex ? Number(indices.mentzerIndex).toFixed(1) : '-'}</span>
+          ${aiAnalysis ? '<span class="history-tag ai-done">✨ มีบทวิเคราะห์ AI</span>' : ''}
+        </div>
+
+        <div class="history-card-actions">
+          <button type="button" class="btn-sm btn-ghost btn-restore-history" data-id="${id}" title="โหลดข้อมูลกลับเข้าฟอร์ม">
+            🔄 โหลดข้อมูล
+          </button>
+          <button type="button" class="btn-sm btn-ghost btn-copy-history" data-id="${id}" title="คัดลอกสรุปผลการตรวจนี้">
+            📋 คัดลอก
+          </button>
+          <button type="button" class="btn-sm btn-danger-outline btn-delete-history" data-id="${id}" title="ลบรายการนี้">
+            🗑️ ลบ
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Attach card event listeners
+  historyListContainer.querySelectorAll('.btn-restore-history').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      restoreHistoryRecord(id);
+    });
+  });
+
+  historyListContainer.querySelectorAll('.btn-copy-history').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      copyHistoryRecord(id);
+    });
+  });
+
+  historyListContainer.querySelectorAll('.btn-delete-history').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      deleteHistoryItem(id);
+      renderHistoryList();
+      updateHistoryBadge();
+      showToast('ลบรายการออกจากประวัติเรียบร้อย', 'info');
+    });
+  });
+}
+
+function restoreHistoryRecord(id) {
+  const history = getCalculationHistory();
+  const record = history.find(item => item.id === id);
+  if (!record || !record.inputs) return;
+
+  const { inputs } = record;
+
+  if (inputs.hbMode === 'direct') {
+    radioHbDirect.checked = true;
+    radioHbCalculated.checked = false;
+    inputHbDirect.value = inputs.hb;
+  } else {
+    radioHbCalculated.checked = true;
+    radioHbDirect.checked = false;
+    inputHbAbs.value = inputs.hbAbs || inputs.hb;
+    inputHbFactor.value = inputs.hbFactor || 1;
+  }
+
+  inputHct.value = inputs.hct;
+  inputRbcCount.value = inputs.rbcRawCount;
+  inputAge.value = inputs.age;
+
+  if (inputs.sex === 'female') {
+    radioSexFemale.checked = true;
+    radioSexMale.checked = false;
+  } else {
+    radioSexMale.checked = true;
+    radioSexFemale.checked = false;
+  }
+
+  checkPregnancy.checked = Boolean(inputs.isPregnant);
+
+  setHemoglobinMode();
+  handleSexChange();
+  updateHemoglobinPreview();
+  updateRbcConversionPreview();
+  triggerDraftSave();
+
+  // Perform calculation without duplicate new history entry
+  performCalculation(false);
+  currentCalculationId = record.id;
+
+  // Restore AI Markdown analysis if it exists
+  if (record.aiAnalysis) {
+    aiPlaceholderView.style.display = 'none';
+    aiLoadingView.style.display = 'none';
+    aiMarkdownOutput.innerHTML = marked.parse(record.aiAnalysis);
+    aiMarkdownOutput.style.display = 'block';
+  } else {
+    aiPlaceholderView.style.display = 'block';
+    aiLoadingView.style.display = 'none';
+    aiMarkdownOutput.style.display = 'none';
+    aiMarkdownOutput.innerHTML = '';
+  }
+
+  closeHistoryModal();
+  showToast('โหลดข้อมูลประวัติผลเลือดเรียบร้อย', 'success');
+}
+
+function copyHistoryRecord(id) {
+  const history = getCalculationHistory();
+  const item = history.find(r => r.id === id);
+  if (!item) return;
+
+  const { inputs, indices, demoRef, evaluations, morphology } = item;
+  const reportText = `📋 ประวัติผลการตรวจและคำนวณดัชนีเม็ดเลือดแดง (HemaCalc AI)
+-------------------------------------------------------
+วันที่บันทึก: ${item.displayDate}
+ข้อมูลผู้ป่วย: เพศ${inputs.sex === 'female' ? 'หญิง' + (inputs.isPregnant ? ' (ตั้งครรภ์)' : '') : 'ชาย'} | อายุ ${inputs.age} ปี
+กลุ่มอ้างอิง: ${demoRef.groupLabel}
+
+ผลตรวจทางห้องปฏิบัติการ:
+- Hemoglobin (Hb): ${inputs.hb} g/dL [${evaluations.hb.labelTh}]
+- Hematocrit (Hct): ${inputs.hct} % [${evaluations.hct.labelTh}]
+- RBC Count: ${inputs.rbcConverted} x 10⁶/µL [${evaluations.rbc.labelTh}]
+
+ดัชนีเม็ดเลือดแดง (RBC Indices):
+- MCV: ${indices.mcv} fL [${evaluations.mcv.labelTh}]
+- MCH: ${indices.mch} pg [${evaluations.mch.labelTh}]
+- MCHC: ${indices.mchc} g/dL [${evaluations.mchc.labelTh}]
+- Mentzer Index: ${indices.mentzerIndex}
+
+การแปลผล:
+- สรุปสัณฐาน: ${morphology.morphologyLabelTh}
+- Mentzer Index: ${morphology.mentzerTh}`;
+
+  navigator.clipboard.writeText(reportText).then(() => {
+    showToast('คัดลอกสรุปผลการตรวจเรียบร้อย', 'success');
+  }).catch(() => {
+    showToast('ไม่สามารถคัดลอกได้ กรุณาลองใหม่', 'error');
+  });
 }
 
 /* ==========================================================================
@@ -628,7 +1051,7 @@ function saveApiModalConfig() {
   updateApiStatusUI();
   closeApiModal();
 
-  showToast(key ? 'บันทึก Gemini API Key สำเร็จ' : 'ล้างการตั้งค่า API Key แล้ว', 'success');
+  showToast(key ? 'บันทึก Gemini API Key ส่วนตัวสำเร็จ' : 'ใช้ Gemini API ระบบกลาง (Vercel)', 'success');
 }
 
 function clearApiKey() {
@@ -636,7 +1059,7 @@ function clearApiKey() {
   modalInputApiKey.value = '';
   updateApiStatusUI();
   closeApiModal();
-  showToast('ลบ Gemini API Key ออกจากเครื่องแล้ว', 'info');
+  showToast('ลบ API Key ส่วนตัวแล้ว (สลับกลับไปใช้ API กลาง)', 'info');
 }
 
 function toggleKeyVisibility() {
@@ -657,12 +1080,12 @@ function updateApiStatusUI() {
 
   if (key) {
     apiStatusDot.classList.add('connected');
-    apiStatusText.textContent = 'Gemini API: พร้อมใช้งาน';
+    apiStatusText.textContent = 'Gemini API: คีย์ส่วนตัว';
     activeModelBadge.textContent = modelLabel;
   } else {
-    apiStatusDot.classList.remove('connected');
-    apiStatusText.textContent = 'ตั้งค่า Gemini API';
-    activeModelBadge.textContent = `${modelLabel} (Offline Expert)`;
+    apiStatusDot.classList.add('connected');
+    apiStatusText.textContent = 'Gemini API: ระบบกลาง (Vercel)';
+    activeModelBadge.textContent = `${modelLabel} (ระบบกลาง)`;
   }
 }
 
@@ -700,7 +1123,7 @@ function showToast(message, type = 'info') {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(8px)';
     setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  }, 4500);
 }
 
 function copyReportToClipboard() {
