@@ -1055,13 +1055,13 @@ function updateApiStatusUI() {
    ========================================================================== */
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('hemacalc_theme') || 'dark';
-  if (savedTheme === 'light') {
-    document.body.classList.add('theme-light');
-    themeIcon.textContent = '☀️';
-  } else {
+  const savedTheme = localStorage.getItem('hemacalc_theme') || 'light';
+  if (savedTheme === 'dark') {
     document.body.classList.remove('theme-light');
     themeIcon.textContent = '🌙';
+  } else {
+    document.body.classList.add('theme-light');
+    themeIcon.textContent = '☀️';
   }
 }
 
