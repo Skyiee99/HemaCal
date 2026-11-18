@@ -46,6 +46,8 @@ const inputHbAbs = document.getElementById('input-hb-abs');
 const inputHbFactor = document.getElementById('input-hb-factor');
 const inputHbDirect = document.getElementById('input-hb-direct');
 const calculatedHbValue = document.getElementById('calculated-hb-value');
+const calculatedHbBadge = document.getElementById('calculated-hb-badge');
+const hbDirectUnitBadge = document.getElementById('hb-direct-unit-badge');
 const hbInputHint = document.getElementById('hb-input-hint');
 const inputHct = document.getElementById('input-hct');
 const inputRbcCount = document.getElementById('input-rbc-count');
@@ -418,9 +420,16 @@ function setHemoglobinMode() {
   inputHbDirect.disabled = !isDirect;
   inputHbDirect.required = isDirect;
 
+  if (calculatedHbBadge) {
+    calculatedHbBadge.hidden = isDirect;
+  }
+  if (hbDirectUnitBadge) {
+    hbDirectUnitBadge.hidden = !isDirect;
+  }
+
   hbInputHint.textContent = isDirect
-    ? 'ระบบจะใช้ค่า Hemoglobin ที่กรอกโดยตรงในสูตรคำนวณ'
-    : 'ระบบจะคำนวณ Hb จาก Abs × Factor แล้วนำค่า Hb ไปใช้ในสูตรเดิม';
+    ? 'กรอกค่า Hemoglobin โดยตรง'
+    : 'คำนวณจาก Abs × Factor';
 
   updateHemoglobinPreview();
 }

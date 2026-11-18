@@ -118,53 +118,65 @@
 
         <form id="rbc-form" novalidate>
           <div class="form-grid">
-            <!-- 1. Hemoglobin -->
-            <div class="form-group">
-              <label class="form-label">
-                <span>ค่า Hemoglobin (Hb)</span>
-                <span class="unit-badge">g/dL</span>
-              </label>
-              <div class="hb-mode-toggle" role="radiogroup" aria-label="วิธีกรอกค่า Hemoglobin">
-                <label class="hb-mode-option" for="hb-mode-calculated">
-                  <input type="radio" id="hb-mode-calculated" name="hbMode" value="calculated" checked>
-                  <span>คำนวณ Abs × Factor</span>
-                </label>
-                <label class="hb-mode-option" for="hb-mode-direct">
-                  <input type="radio" id="hb-mode-direct" name="hbMode" value="direct">
-                  <span>กรอก Hb โดยตรง</span>
-                </label>
+            <!-- 0. Hemoglobin Mode Toggle Bar (Full Width across the top of Hb & Hct) -->
+            <div class="form-group full-width hb-mode-bar">
+              <div class="hb-mode-bar-inner">
+                <span class="hb-mode-label">วิธีระบุค่า Hemoglobin:</span>
+                <div class="hb-mode-toggle" role="radiogroup" aria-label="วิธีกรอกค่า Hemoglobin">
+                  <label class="hb-mode-option" for="hb-mode-calculated">
+                    <input type="radio" id="hb-mode-calculated" name="hbMode" value="calculated" checked>
+                    <span>คำนวณ Abs × Factor</span>
+                  </label>
+                  <label class="hb-mode-option" for="hb-mode-direct">
+                    <input type="radio" id="hb-mode-direct" name="hbMode" value="direct">
+                    <span>กรอก Hb โดยตรง</span>
+                  </label>
+                </div>
               </div>
+            </div>
 
+            <!-- 1. Hemoglobin -->
+            <div class="form-group hb-form-group">
+              <label class="form-label" for="input-hb-abs">
+                <span>ค่า Hemoglobin (Hb)</span>
+                <span class="calculated-hb-badge" id="calculated-hb-badge" title="ผลคำนวณ Hb จาก Abs × Factor">
+                  Hb = <strong id="calculated-hb-value">0.0</strong> g/dL
+                </span>
+                <span class="unit-badge" id="hb-direct-unit-badge" hidden>g/dL</span>
+              </label>
+
+              <!-- Calculated Mode Inputs (Abs & Factor side-by-side) -->
               <div id="hb-calculated-inputs" class="hb-input-pair">
-                <div>
-                  <label for="input-hb-abs" class="input-sublabel">Abs</label>
+                <div class="input-wrapper">
                   <input
                     type="text"
                     id="input-hb-abs"
                     name="hbAbs"
-                    class="form-control"
-                    placeholder="เช่น 0.145"
+                    class="form-control hb-sub-control"
+                    placeholder="Abs (เช่น 0.145)"
                     inputmode="decimal"
                     autocomplete="off"
                     required
                   >
+                  <span class="input-unit">Abs</span>
                 </div>
-                <div>
-                  <label for="input-hb-factor" class="input-sublabel">Factor</label>
+                <div class="input-wrapper">
                   <input
                     type="text"
                     id="input-hb-factor"
                     name="hbFactor"
-                    class="form-control"
-                    placeholder="เช่น 100"
+                    class="form-control hb-sub-control"
+                    placeholder="Factor (เช่น 100)"
                     inputmode="decimal"
                     autocomplete="off"
                     required
                   >
+                  <span class="input-unit">Factor</span>
                 </div>
               </div>
+
+              <!-- Direct Mode Input -->
               <div id="hb-direct-input" class="hb-direct-input" hidden>
-                <label for="input-hb-direct" class="input-sublabel">Hemoglobin (g/dL)</label>
                 <div class="input-wrapper">
                   <input
                     type="text"
@@ -179,14 +191,12 @@
                   <span class="input-unit">g/dL</span>
                 </div>
               </div>
-              <div class="hb-calculation-preview">
-                Hb = <strong id="calculated-hb-value">0.0</strong> g/dL
-              </div>
-              <span id="hb-input-hint" class="form-hint">ระบบจะคำนวณ Hb จาก Abs × Factor แล้วนำค่า Hb ไปใช้ในสูตรเดิม</span>
+
+              <span id="hb-input-hint" class="form-hint">คำนวณจาก Abs × Factor</span>
             </div>
 
             <!-- 2. Hematocrit -->
-            <div class="form-group">
+            <div class="form-group hct-form-group">
               <label for="input-hct" class="form-label">
                 <span>ค่า Hematocrit (Hct)</span>
                 <span class="unit-badge">%</span>
