@@ -88,10 +88,6 @@
           <span class="preset-tag warning">พาหะธาลัสซีเมีย</span>
           <span class="preset-name">MCV ต่ำ RBC สูง</span>
         </button>
-        <button type="button" class="preset-btn" data-preset="pregnancy">
-          <span class="preset-tag info">หญิงตั้งครรภ์</span>
-          <span class="preset-name">ซีดสรีรวิทยา (Hemodilution)</span>
-        </button>
         <button type="button" class="preset-btn" data-preset="macrocytic">
           <span class="preset-tag purple">เม็ดเลือดขนาดใหญ่</span>
           <span class="preset-name">ขาด B12 / Folate (MCV > 100)</span>
@@ -253,15 +249,15 @@
                   id="input-age" 
                   name="age" 
                   class="form-control" 
-                  placeholder="เช่น 32" 
-                  step="1" 
+                  placeholder="เช่น 32 หรือ 0.02 สำหรับทารก" 
+                  step="any" 
                   min="0" 
                   max="120" 
                   required
                 >
                 <span class="input-unit">ปี</span>
               </div>
-              <span class="form-hint">เพื่อใช้เทียบช่วงค่าอ้างอิงเฉพาะวัย</span>
+              <span class="form-hint">กรอกเป็นปี; ทารกใช้ทศนิยมได้ เช่น 0.02 ปี ≈ 7 วัน</span>
             </div>
 
             <!-- 5. Demographic: Sex -->
@@ -287,22 +283,6 @@
               </div>
             </div>
 
-            <!-- 6. Conditional: Pregnancy Option (Only when Sex = Female) -->
-            <div class="form-group full-width pregnancy-wrapper" id="pregnancy-container">
-              <div class="pregnancy-card">
-                <div class="pregnancy-info">
-                  <span class="pregnancy-icon">🤰</span>
-                  <div>
-                    <label for="check-pregnancy" class="pregnancy-title">ภาวะตั้งครรภ์ (Pregnancy Status)</label>
-                    <p class="pregnancy-desc">ตั้งครรภ์หรือไม่? (ปรับเกณฑ์ Hb/Hct ลดลงตามการเจือจางของเลือดในสตรีมีครรภ์)</p>
-                  </div>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" id="check-pregnancy" name="isPregnant">
-                  <span class="slider round"></span>
-                </label>
-              </div>
-            </div>
           </div>
 
           <!-- Form Actions -->
@@ -523,7 +503,7 @@
             <div class="math-box">
               $$\text{MCV (fL)} = \frac{\text{Hct (\%)} \times 10}{\text{RBC } (10^6/\mu\text{L})}$$
             </div>
-            <p><strong>เกณฑ์ปกติ:</strong> 80.0 – 100.0 fL (ปริมาตรเฉลี่ยของเม็ดเลือดแดงหนึ่งเซลล์)</p>
+            <p><strong>เกณฑ์ปกติ:</strong> 80.0 – 96.0 fL (ปริมาตรเฉลี่ยของเม็ดเลือดแดงหนึ่งเซลล์)</p>
           </div>
 
           <div class="formula-item">
@@ -531,7 +511,7 @@
             <div class="math-box">
               $$\text{MCH (pg)} = \frac{\text{Hb (g/dL)} \times 10}{\text{RBC } (10^6/\mu\text{L})}$$
             </div>
-            <p><strong>เกณฑ์ปกติ:</strong> 27.0 – 31.0 pg (น้ำหนักฮีโมโกลบินเฉลี่ยในเม็ดเลือดแดงหนึ่งเซลล์)</p>
+            <p><strong>เกณฑ์ปกติ:</strong> 27.5 – 33.2 pg (น้ำหนักฮีโมโกลบินเฉลี่ยในเม็ดเลือดแดงหนึ่งเซลล์)</p>
           </div>
 
           <div class="formula-item">
@@ -539,7 +519,7 @@
             <div class="math-box">
               $$\text{MCHC (g/dL)} = \frac{\text{Hb (g/dL)} \times 100}{\text{Hct (\%)'}}$$
             </div>
-            <p><strong>เกณฑ์ปกติ:</strong> 32.0 – 36.0 g/dL (ความเข้มข้นเฉลี่ยของฮีโมโกลบินในปริมาตรเม็ดเลือดแดง)</p>
+            <p><strong>เกณฑ์ปกติ:</strong> 33.4 – 35.5 g/dL (ความเข้มข้นเฉลี่ยของฮีโมโกลบินในปริมาตรเม็ดเลือดแดง)</p>
           </div>
 
           <div class="formula-item">

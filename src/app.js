@@ -2,7 +2,7 @@
  * HemaCalc AI - Main Application Controller
  */
 
-import { calculateRBCIndices } from './reference-ranges.js';
+import { calculateRBCIndices, getRbcIndicesReference } from './reference-ranges.js';
 import { 
   getStoredApiKey, 
   saveStoredApiKey, 
@@ -53,8 +53,6 @@ const convertedRbcVal = document.getElementById('converted-rbc-val');
 const inputAge = document.getElementById('input-age');
 const radioSexMale = document.getElementById('radio-sex-male');
 const radioSexFemale = document.getElementById('radio-sex-female');
-const checkPregnancy = document.getElementById('check-pregnancy');
-const pregnancyContainer = document.getElementById('pregnancy-container');
 
 // Results elements
 const emptyStateView = document.getElementById('empty-state-view');
@@ -130,8 +128,7 @@ const PRESETS = {
     hct: 45.5,
     rbcCount: 495, // 4.95 x 10^6/uL
     age: 32,
-    sex: 'male',
-    isPregnant: false
+    sex: 'male'
   },
   'iron-deficiency': {
     name: 'โลหิตจางจากการขาดธาตุเหล็ก (Iron Deficiency Anemia)',
@@ -139,8 +136,7 @@ const PRESETS = {
     hct: 29.5,
     rbcCount: 380, // 3.80 x 10^6/uL -> MCV = 77.6, MCH = 24.2, Mentzer = 20.4 (>13)
     age: 28,
-    sex: 'female',
-    isPregnant: false
+    sex: 'female'
   },
   'thalassemia-trait': {
     name: 'พาหะธาลัสซีเมีย (Thalassemia Trait)',
@@ -148,17 +144,7 @@ const PRESETS = {
     hct: 34.0,
     rbcCount: 540, // 5.40 x 10^6/uL -> MCV = 63.0, MCH = 20.0, Mentzer = 11.7 (<13)
     age: 24,
-    sex: 'female',
-    isPregnant: false
-  },
-  'pregnancy': {
-    name: 'หญิงตั้งครรภ์ (Pregnancy Hemodilution)',
-    hb: 11.2,
-    hct: 34.5,
-    rbcCount: 390, // 3.90 x 10^6/uL
-    age: 29,
-    sex: 'female',
-    isPregnant: true
+    sex: 'female'
   },
   'macrocytic': {
     name: 'เม็ดเลือดแดงขนาดใหญ่ / ขาด B12 หรือโฟเลต (Macrocytic Anemia)',
@@ -166,8 +152,7 @@ const PRESETS = {
     hct: 31.0,
     rbcCount: 280, // 2.80 x 10^6/uL -> MCV = 110.7
     age: 68,
-    sex: 'male',
-    isPregnant: false
+    sex: 'male'
   },
   'pediatric': {
     name: 'เด็กปฐมวัย (Pediatric Case 3 ปี)',
@@ -175,8 +160,7 @@ const PRESETS = {
     hct: 36.0,
     rbcCount: 435, // 4.35 x 10^6/uL
     age: 3,
-    sex: 'male',
-    isPregnant: false
+    sex: 'male'
   }
 };
 
@@ -229,15 +213,8 @@ function setupEventListeners() {
 
   // Demographics change & draft autosave
   inputAge.addEventListener('input', triggerDraftSave);
-  radioSexMale.addEventListener('change', () => {
-    handleSexChange();
-    triggerDraftSave();
-  });
-  radioSexFemale.addEventListener('change', () => {
-    handleSexChange();
-    triggerDraftSave();
-  });
-  checkPregnancy.addEventListener('change', triggerDraftSave);
+  radioSexMale.addEventListener('change', triggerDraftSave);
+  radioSexFemale.addEventListener('change', triggerDraftSave);
 
   // Form Submission
   form.addEventListener('submit', (e) => {
@@ -368,8 +345,7 @@ function triggerDraftSave() {
       hct: inputHct.value,
       rbcRawCount: inputRbcCount.value,
       age: inputAge.value,
-      sex: radioSexFemale.checked ? 'female' : 'male',
-      isPregnant: checkPregnancy.checked
+      sex: radioSexFemale.checked ? 'female' : 'male'
     });
   }, 400);
 }
@@ -401,10 +377,7 @@ function restoreFormDraft() {
     radioSexFemale.checked = false;
   }
 
-  checkPregnancy.checked = Boolean(draft.isPregnant);
-
   setHemoglobinMode();
-  handleSexChange();
   updateHemoglobinPreview();
   updateRbcConversionPreview();
 }
@@ -463,16 +436,6 @@ function getHemoglobinValues() {
   return { hb: hbAbs * hbFactor, hbAbs, hbFactor, hbMode: 'calculated' };
 }
 
-function handleSexChange() {
-  const isFemale = radioSexFemale.checked;
-  if (isFemale) {
-    pregnancyContainer.style.display = 'block';
-  } else {
-    pregnancyContainer.style.display = 'none';
-    checkPregnancy.checked = false;
-  }
-}
-
 function loadPreset(key) {
   const preset = PRESETS[key];
   if (!preset) return;
@@ -494,8 +457,6 @@ function loadPreset(key) {
     radioSexFemale.checked = false;
   }
 
-  handleSexChange();
-  checkPregnancy.checked = Boolean(preset.isPregnant);
   updateHemoglobinPreview();
   updateRbcConversionPreview();
   triggerDraftSave();
@@ -512,7 +473,6 @@ function resetForm() {
   radioHbCalculated.checked = true;
   radioHbDirect.checked = false;
   setHemoglobinMode();
-  handleSexChange();
   updateRbcConversionPreview();
   clearFormDraft();
   currentCalculation = null;
@@ -541,7 +501,6 @@ function performCalculation(saveHistory = true) {
   const rbcRawCount = inputRbcCount.value;
   const age = inputAge.value;
   const sex = radioSexFemale.checked ? 'female' : 'male';
-  const isPregnant = sex === 'female' && checkPregnancy.checked;
 
   try {
     const result = calculateRBCIndices({
@@ -552,8 +511,7 @@ function performCalculation(saveHistory = true) {
       hct,
       rbcRawCount,
       age,
-      sex,
-      isPregnant
+      sex
     });
 
     currentCalculation = result;
@@ -590,12 +548,10 @@ function calculateGaugePosition(value, min, max) {
 }
 
 function renderResults(data) {
-  const { inputs, indices, demoRef, evaluations, morphology } = data;
+  const { inputs, indices, demoRef, indicesRef, evaluations, morphology } = data;
 
   // 1. Patient Summary Badge
-  const sexLabel = inputs.sex === 'female' 
-    ? (inputs.isPregnant ? 'หญิง (ตั้งครรภ์ 🤰)' : 'หญิง')
-    : 'ชาย';
+  const sexLabel = inputs.sex === 'female' ? 'หญิง' : 'ชาย';
   patientSummaryBadge.textContent = `ผู้ป่วย: เพศ${sexLabel} | อายุ ${inputs.age} ปี | กลุ่มอ้างอิง: ${demoRef.groupLabel}`;
 
   // 2. Table Rows
@@ -634,27 +590,27 @@ function renderResults(data) {
       sub: 'ปริมาตรเฉลี่ยของเม็ดเลือดแดง: (Hct × 10) ÷ RBC',
       value: indices.mcv.toFixed(1),
       unit: 'fL',
-      ref: '80.0 - 100.0 fL',
+       ref: `${indicesRef.mcv.min} - ${indicesRef.mcv.max} fL`,
       status: evaluations.mcv,
-      gaugePct: calculateGaugePosition(indices.mcv, 80.0, 100.0)
+       gaugePct: calculateGaugePosition(indices.mcv, indicesRef.mcv.min, indicesRef.mcv.max)
     },
     {
       name: 'MCH (Mean Corpuscular Hemoglobin)',
       sub: 'น้ำหนักฮีโมโกลบินเฉลี่ยในเซลล์: (Hb × 10) ÷ RBC',
       value: indices.mch.toFixed(1),
       unit: 'pg',
-      ref: '27.0 - 31.0 pg',
+       ref: `${indicesRef.mch.min} - ${indicesRef.mch.max} pg`,
       status: evaluations.mch,
-      gaugePct: calculateGaugePosition(indices.mch, 27.0, 31.0)
+       gaugePct: calculateGaugePosition(indices.mch, indicesRef.mch.min, indicesRef.mch.max)
     },
     {
       name: 'MCHC (Mean Corpuscular Hb Concentration)',
       sub: 'ความเข้มข้นเฉลี่ยของฮีโมโกลบิน: (Hb × 100) ÷ Hct',
       value: indices.mchc.toFixed(1),
       unit: 'g/dL',
-      ref: '32.0 - 36.0 g/dL',
+       ref: `${indicesRef.mchc.min} - ${indicesRef.mchc.max} g/dL`,
       status: evaluations.mchc,
-      gaugePct: calculateGaugePosition(indices.mchc, 32.0, 36.0)
+       gaugePct: calculateGaugePosition(indices.mchc, indicesRef.mchc.min, indicesRef.mchc.max)
     }
   ];
 
@@ -844,9 +800,7 @@ function renderHistoryList() {
 
   historyListContainer.innerHTML = history.map(item => {
     const { inputs, indices, morphology, displayDate, id, aiAnalysis } = item;
-    const sexText = inputs.sex === 'female' 
-      ? (inputs.isPregnant ? 'หญิง (ตั้งครรภ์)' : 'หญิง')
-      : 'ชาย';
+    const sexText = inputs.sex === 'female' ? 'หญิง' : 'ชาย';
 
     const hbModeText = inputs.hbMode === 'direct' ? 'กรอกตรง' : 'Abs×Factor';
 
@@ -963,10 +917,7 @@ function restoreHistoryRecord(id) {
     radioSexFemale.checked = false;
   }
 
-  checkPregnancy.checked = Boolean(inputs.isPregnant);
-
   setHemoglobinMode();
-  handleSexChange();
   updateHemoglobinPreview();
   updateRbcConversionPreview();
   triggerDraftSave();
@@ -998,10 +949,11 @@ function copyHistoryRecord(id) {
   if (!item) return;
 
   const { inputs, indices, demoRef, evaluations, morphology } = item;
+  const indicesRef = item.indicesRef || getRbcIndicesReference(inputs.age, inputs.sex);
   const reportText = `📋 ประวัติผลการตรวจและคำนวณดัชนีเม็ดเลือดแดง (HemaCalc AI)
 -------------------------------------------------------
 วันที่บันทึก: ${item.displayDate}
-ข้อมูลผู้ป่วย: เพศ${inputs.sex === 'female' ? 'หญิง' + (inputs.isPregnant ? ' (ตั้งครรภ์)' : '') : 'ชาย'} | อายุ ${inputs.age} ปี
+ข้อมูลผู้ป่วย: เพศ${inputs.sex === 'female' ? 'หญิง' : 'ชาย'} | อายุ ${inputs.age} ปี
 กลุ่มอ้างอิง: ${demoRef.groupLabel}
 
 ผลตรวจทางห้องปฏิบัติการ:
@@ -1010,9 +962,9 @@ function copyHistoryRecord(id) {
 - RBC Count: ${inputs.rbcConverted} x 10⁶/µL [${evaluations.rbc.labelTh}]
 
 ดัชนีเม็ดเลือดแดง (RBC Indices):
-- MCV: ${indices.mcv} fL [${evaluations.mcv.labelTh}]
-- MCH: ${indices.mch} pg [${evaluations.mch.labelTh}]
-- MCHC: ${indices.mchc} g/dL [${evaluations.mchc.labelTh}]
+- MCV: ${indices.mcv} fL [${evaluations.mcv.labelTh}] (เกณฑ์: ${indicesRef.mcv.min}-${indicesRef.mcv.max} fL)
+- MCH: ${indices.mch} pg [${evaluations.mch.labelTh}] (เกณฑ์: ${indicesRef.mch.min}-${indicesRef.mch.max} pg)
+- MCHC: ${indices.mchc} g/dL [${evaluations.mchc.labelTh}] (เกณฑ์: ${indicesRef.mchc.min}-${indicesRef.mchc.max} g/dL)
 - Mentzer Index: ${indices.mentzerIndex}
 
 การแปลผล:
@@ -1129,10 +1081,10 @@ function showToast(message, type = 'info') {
 function copyReportToClipboard() {
   if (!currentCalculation) return;
 
-  const { inputs, indices, demoRef, evaluations, morphology } = currentCalculation;
+  const { inputs, indices, demoRef, indicesRef, evaluations, morphology } = currentCalculation;
   const reportText = `📋 สรุปผลการตรวจและคำนวณดัชนีเม็ดเลือดแดง (HemaCalc AI Report)
 -------------------------------------------------------
-ข้อมูลผู้ป่วย: เพศ${inputs.sex === 'female' ? 'หญิง' + (inputs.isPregnant ? ' (ตั้งครรภ์)' : '') : 'ชาย'} | อายุ ${inputs.age} ปี
+ข้อมูลผู้ป่วย: เพศ${inputs.sex === 'female' ? 'หญิง' : 'ชาย'} | อายุ ${inputs.age} ปี
 กลุ่มอ้างอิง: ${demoRef.groupLabel}
 
 ผลการตรวจทางห้องปฏิบัติการ:
@@ -1142,9 +1094,9 @@ function copyReportToClipboard() {
 - RBC Count (แปลงหน่วย): ${inputs.rbcConverted} x 10⁶/µL [${evaluations.rbc.labelTh}] (เกณฑ์: ${demoRef.rbc.min}-${demoRef.rbc.max})
 
 ดัชนีเม็ดเลือดแดง (RBC Indices):
-- MCV: ${indices.mcv} fL [${evaluations.mcv.labelTh}] (เกณฑ์ปกติ: 80 - 100 fL)
-- MCH: ${indices.mch} pg [${evaluations.mch.labelTh}] (เกณฑ์ปกติ: 27 - 31 pg)
-- MCHC: ${indices.mchc} g/dL [${evaluations.mchc.labelTh}] (เกณฑ์ปกติ: 32 - 36 g/dL)
+- MCV: ${indices.mcv} fL [${evaluations.mcv.labelTh}] (เกณฑ์: ${indicesRef.mcv.min}-${indicesRef.mcv.max} fL)
+- MCH: ${indices.mch} pg [${evaluations.mch.labelTh}] (เกณฑ์: ${indicesRef.mch.min}-${indicesRef.mch.max} pg)
+- MCHC: ${indices.mchc} g/dL [${evaluations.mchc.labelTh}] (เกณฑ์: ${indicesRef.mchc.min}-${indicesRef.mchc.max} g/dL)
 - Mentzer Index (MCV/RBC): ${indices.mentzerIndex}
 
 การแปลผลทางสัณฐานวิทยา:

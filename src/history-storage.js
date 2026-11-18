@@ -92,6 +92,7 @@ export function saveCalculationToHistory(calcResult) {
       displayDate: formatThaiDateTime(new Date().toISOString()),
       inputs: { ...calcResult.inputs },
       indices: { ...calcResult.indices },
+      indicesRef: { ...calcResult.indicesRef },
       demoRef: { ...calcResult.demoRef },
       evaluations: { ...calcResult.evaluations },
       morphology: { ...calcResult.morphology },
@@ -165,3 +166,4 @@ export function exportHistoryAsJSON() {
   downloadAnchor.click();
   downloadAnchor.remove();
 }
+

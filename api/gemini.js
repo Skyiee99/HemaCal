@@ -4,18 +4,13 @@
  */
 
 function buildPrompt(calcData) {
-  const { inputs, indices, demoRef, evaluations, morphology } = calcData;
-
-  const pregnancyText = inputs.sex === 'female'
-    ? (inputs.isPregnant ? 'ตั้งครรภ์ (Pregnant)' : 'ไม่ได้ตั้งครรภ์ (Not pregnant)')
-    : 'ไม่เกี่ยวข้อง (เพศชาย)';
+  const { inputs, indices, demoRef, indicesRef, evaluations, morphology } = calcData;
 
   return `คุณเป็นอายุรแพทย์ผู้เชี่ยวชาญด้านโลหิตวิทยา (Senior Clinical Hematologist) และผู้เชี่ยวชาญด้านเทคนิคการแพทย์ กรุณาช่วยแปลผล วิเคราะห์ดัชนีเม็ดเลือดแดง (RBC Indices) และให้คำแนะนำทางการแพทย์อย่างละเอียด ชัดเจน และเป็นระบบ
 
 ### 1. ข้อมูลผู้ป่วย (Demographic Data)
 - อายุ: ${inputs.age} ปี
 - เพศ: ${inputs.sex === 'female' ? 'หญิง' : 'ชาย'}
-- สถานะการตั้งครรภ์: ${pregnancyText}
 - กลุ่มอ้างอิง: ${demoRef.groupLabel} (${demoRef.note})
 
 ### 2. ผลการตรวจทางห้องปฏิบัติการ (CBC & RBC Indices)
@@ -23,9 +18,9 @@ function buildPrompt(calcData) {
 - Hematocrit (Hct): ${inputs.hct} % (ค่าอ้างอิง: ${demoRef.hct.min} - ${demoRef.hct.max} %) -> สถานะ: ${evaluations.hct.labelTh}
 - RBC Count (Dilute 1:200 ใน 5 ช่องนับ): ${inputs.rbcRawCount} cells/5 squares
 - RBC Count (แปลงหน่วยแล้ว): ${inputs.rbcConverted} x 10⁶/µL (ค่าอ้างอิง: ${demoRef.rbc.min} - ${demoRef.rbc.max} x 10⁶/µL) -> สถานะ: ${evaluations.rbc.labelTh}
-- MCV (Mean Corpuscular Volume): ${indices.mcv} fL (ค่าอ้างอิง: 80.0 - 100.0 fL) -> สถานะ: ${evaluations.mcv.labelTh}
-- MCH (Mean Corpuscular Hemoglobin): ${indices.mch} pg (ค่าอ้างอิง: 27.0 - 31.0 pg) -> สถานะ: ${evaluations.mch.labelTh}
-- MCHC (Mean Corpuscular Hb Concentration): ${indices.mchc} g/dL (ค่าอ้างอิง: 32.0 - 36.0 g/dL) -> สถานะ: ${evaluations.mchc.labelTh}
+- MCV (Mean Corpuscular Volume): ${indices.mcv} fL (ค่าอ้างอิง: ${indicesRef.mcv.min} - ${indicesRef.mcv.max} fL) -> สถานะ: ${evaluations.mcv.labelTh}
+- MCH (Mean Corpuscular Hemoglobin): ${indices.mch} pg (ค่าอ้างอิง: ${indicesRef.mch.min} - ${indicesRef.mch.max} pg) -> สถานะ: ${evaluations.mch.labelTh}
+- MCHC (Mean Corpuscular Hb Concentration): ${indices.mchc} g/dL (ค่าอ้างอิง: ${indicesRef.mchc.min} - ${indicesRef.mchc.max} g/dL) -> สถานะ: ${evaluations.mchc.labelTh}
 - Mentzer Index (MCV / RBC): ${indices.mentzerIndex} (${morphology.mentzerTh})
 
 ### 3. การประเมินทางสัณฐานวิทยาเบื้องต้น
@@ -37,7 +32,7 @@ function buildPrompt(calcData) {
 ### คำสั่งสำหรับการวิเคราะห์ (กรุณาตอบเป็นภาษาไทย โดยใช้ Markdown จัดหัวข้อสวยงาม):
 1. **สรุปความผิดปกติของสัณฐานวิทยาและดัชนีเม็ดเลือดแดง**: อธิบายค่า MCV, MCH, MCHC, Hb, Hct ว่าสะท้อนถึงอะไร
 2. **การวินิจฉัยแยกโรคที่เป็นไปได้มากที่สุด (Differential Diagnosis)**: 
-   - จัดลำดับโรคที่น่าจะเป็นไปได้มากที่สุด เช่น Iron Deficiency Anemia, Thalassemia Trait / Disease, Anemia of Chronic Disease, Megaloblastic Anemia, Sideroblastic Anemia, หรือสรีรวิทยาของการตั้งครรภ์
+   - จัดลำดับโรคที่น่าจะเป็นไปได้มากที่สุด เช่น Iron Deficiency Anemia, Thalassemia Trait / Disease, Anemia of Chronic Disease, Megaloblastic Anemia หรือ Sideroblastic Anemia
    - วิเคราะห์เปรียบเทียบโดยใช้ค่า Mentzer Index (${indices.mentzerIndex}) ร่วมด้วย
 3. **การตรวจทางห้องปฏิบัติการเพื่อยืนยันการวินิจฉัย (Recommended Laboratory Workup)**: แนะนำการตรวจเพิ่มเติมที่จำเพาะเจาะจง (เช่น Serum Ferritin, Serum Iron/TIBC, Hemoglobin typing, PCR for alpha-thalassemia, Peripheral Blood Smear, Reticulocyte count)
 4. **ข้อเสนอแนะทางคลินิกและการดูแลผู้ป่วยเบื้องต้น (Clinical Considerations & Patient Care)**
@@ -182,3 +177,4 @@ export default async function handler(req, res) {
     });
   }
 }
+

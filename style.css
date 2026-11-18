@@ -650,50 +650,6 @@ body.theme-light .rbc-conversion-pill {
   box-shadow: 0 0 12px rgba(225, 29, 72, 0.25);
 }
 
-/* Pregnancy Card */
-.pregnancy-wrapper {
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.pregnancy-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.85rem 1.15rem;
-  background: rgba(236, 72, 153, 0.08);
-  border: 1px solid rgba(236, 72, 153, 0.25);
-  border-radius: var(--radius-md);
-}
-
-body.theme-light .pregnancy-card {
-  background: #fdf2f8;
-  border-color: #fbcfe8;
-}
-
-.pregnancy-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.pregnancy-icon {
-  font-size: 1.6rem;
-}
-
-.pregnancy-title {
-  display: block;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text-main);
-  cursor: pointer;
-}
-
-.pregnancy-desc {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
 /* iOS-style Switch */
 .switch {
   position: relative;
