@@ -30,6 +30,10 @@ function buildPrompt(calcData) {
 
 ---
 ### คำสั่งสำหรับการวิเคราะห์ (กรุณาตอบเป็นภาษาไทย โดยใช้ Markdown จัดหัวข้อสวยงาม):
+**ข้อกำหนดรูปแบบคำตอบ (สำคัญมาก)**:
+- ห้ามเขียนคำขึ้นต้นจดหมาย คำทักทาย หรือบทนำ เช่น "เรียน...", "ขอส่งรายงาน...", "ในฐานะ..." โดยเด็ดขาด
+- ให้เริ่มเข้าสู่เนื้อหาผลการวิเคราะห์ทันที โดยเริ่มที่หัวข้อที่ 1 ทันที
+
 1. **สรุปความผิดปกติของสัณฐานวิทยาและดัชนีเม็ดเลือดแดง**: อธิบายค่า MCV, MCH, MCHC, Hb, Hct ว่าสะท้อนถึงอะไร
 2. **การวินิจฉัยแยกโรคที่เป็นไปได้มากที่สุด (Differential Diagnosis)**: 
    - จัดลำดับโรคที่น่าจะเป็นไปได้มากที่สุด เช่น Iron Deficiency Anemia, Thalassemia Trait / Disease, Anemia of Chronic Disease, Megaloblastic Anemia หรือ Sideroblastic Anemia
@@ -37,6 +41,28 @@ function buildPrompt(calcData) {
 3. **การตรวจทางห้องปฏิบัติการเพื่อยืนยันการวินิจฉัย (Recommended Laboratory Workup)**: แนะนำการตรวจเพิ่มเติมที่จำเพาะเจาะจง (เช่น Serum Ferritin, Serum Iron/TIBC, Hemoglobin typing, PCR for alpha-thalassemia, Peripheral Blood Smear, Reticulocyte count)
 4. **ข้อเสนอแนะทางคลินิกและการดูแลผู้ป่วยเบื้องต้น (Clinical Considerations & Patient Care)**
 5. **ข้อจำกัดและข้อควรระวัง**: สิ่งที่ควรซักประวัติเพิ่มเติม (ประวัติครอบครัว, ประวัติการเสียเลือด, โภชนาการ)`;
+}
+
+/**
+ * Cleans introductory salutations and greetings from AI responses
+ */
+export function cleanAIReportText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let text = rawText.trim();
+
+  const sectionRegex = /(?:^|\n)(#{1,4}\s*(?:[1-9][\.\)]|สรุป|การวิเคราะห์|ผลการวิเคราะห์)|(?:\*\*)?[1-9][\.\)]\s*(?:\*\*)?|(?:\*\*)สรุปความผิดปกติ)/i;
+  const match = text.match(sectionRegex);
+
+  if (match && match.index !== undefined) {
+    const preamble = text.slice(0, match.index).trim();
+    if (preamble && /เรียน|ในฐานะ|ขอส่ง|กราบเรียน|สวัสดี|สำหรับผู้ป่วย|รายงานผลการ/i.test(preamble)) {
+      text = text.slice(match.index).trim();
+    }
+  } else {
+    text = text.replace(/^(?:เรียน|ในฐานะ|ขอส่งรายงาน|กราบเรียน|สวัสดี)[^\n]*(\r?\n)+([^\n]*ดังมีรายละเอียด[^\n]*(\r?\n)+)?/gi, '').trim();
+  }
+
+  return text;
 }
 
 export default async function handler(req, res) {
@@ -164,9 +190,12 @@ export default async function handler(req, res) {
       });
     }
 
+    const rawAnalysis = candidate.content.parts[0].text;
+    const cleanedAnalysis = cleanAIReportText(rawAnalysis);
+
     return res.status(200).json({
       success: true,
-      analysis: candidate.content.parts[0].text,
+      analysis: cleanedAnalysis,
       model: selectedModel,
       source: userApiKey ? 'custom_key' : 'central_api'
     });

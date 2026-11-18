@@ -11,7 +11,8 @@ import {
   AVAILABLE_MODELS,
   DEFAULT_MODEL,
   consultGeminiAPI, 
-  generateOfflineExpertAnalysis 
+  generateOfflineExpertAnalysis,
+  cleanAIReportText 
 } from './gemini-api.js';
 import {
   saveFormDraft,
@@ -718,7 +719,8 @@ async function triggerAIAnalysis() {
       }
     }
 
-    // Render Markdown
+    // Clean any unwanted salutations/preambles and render Markdown
+    markdownResponse = cleanAIReportText(markdownResponse);
     aiMarkdownOutput.innerHTML = marked.parse(markdownResponse);
     aiLoadingView.style.display = 'none';
     aiMarkdownOutput.style.display = 'block';
@@ -939,7 +941,7 @@ function restoreHistoryRecord(id) {
   if (record.aiAnalysis) {
     aiPlaceholderView.style.display = 'none';
     aiLoadingView.style.display = 'none';
-    aiMarkdownOutput.innerHTML = marked.parse(record.aiAnalysis);
+    aiMarkdownOutput.innerHTML = marked.parse(cleanAIReportText(record.aiAnalysis));
     aiMarkdownOutput.style.display = 'block';
   } else {
     aiPlaceholderView.style.display = 'block';
