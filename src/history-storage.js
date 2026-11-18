@@ -154,16 +154,148 @@ export function clearAllHistory() {
 }
 
 /**
- * Exports history data as downloadable JSON file
+ * Exports history data as a printable PDF via browser print dialog.
+ * Uses window.print() on a new window with styled HTML so Thai characters render correctly.
  */
-export function exportHistoryAsJSON() {
+export function exportHistoryAsPDF() {
   const history = getCalculationHistory();
-  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(history, null, 2));
-  const downloadAnchor = document.createElement('a');
-  downloadAnchor.setAttribute('href', dataStr);
-  downloadAnchor.setAttribute('download', `hemacalc-history-${new Date().toISOString().slice(0, 10)}.json`);
-  document.body.appendChild(downloadAnchor);
-  downloadAnchor.click();
-  downloadAnchor.remove();
+  if (!history || history.length === 0) {
+    alert('ไม่มีประวัติการคำนวณที่จะส่งออก');
+    return;
+  }
+
+  const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Status label helper
+  function statusLabel(val) {
+    if (!val) return '-';
+    if (val === 'low') return 'ต่ำ';
+    if (val === 'high') return 'สูง';
+    if (val === 'normal') return 'ปกติ';
+    return val;
+  }
+
+  // Build HTML rows for each record
+  const recordsHTML = history.map((rec, idx) => {
+    const inp = rec.inputs || {};
+    const idx2 = rec.indices || {};
+    const ev = rec.evaluations || {};
+    const morph = rec.morphology || {};
+    const demo = rec.demoRef || {};
+
+    const rows = [
+      ['Hemoglobin (Hb)', `${inp.hemoglobin ?? '-'} g/dL`, statusLabel(ev.hb)],
+      ['Hematocrit (Hct)', `${inp.hematocrit ?? '-'} %`, statusLabel(ev.hct)],
+      ['RBC Count', `${inp.rbc ?? '-'} ×10⁶/µL`, statusLabel(ev.rbc)],
+      ['MCV', `${typeof idx2.mcv === 'number' ? idx2.mcv.toFixed(1) : '-'} fL`, statusLabel(ev.mcv)],
+      ['MCH', `${typeof idx2.mch === 'number' ? idx2.mch.toFixed(1) : '-'} pg`, statusLabel(ev.mch)],
+      ['MCHC', `${typeof idx2.mchc === 'number' ? idx2.mchc.toFixed(1) : '-'} g/dL`, statusLabel(ev.mchc)],
+      ['Mentzer Index', `${typeof idx2.mentzerIndex === 'number' ? idx2.mentzerIndex.toFixed(2) : '-'}`, '-'],
+    ].map(([label, value, status]) =>
+      `<tr>
+        <td>${label}</td>
+        <td>${value}</td>
+        <td class="status-cell ${status === 'ต่ำ' ? 'low' : status === 'สูง' ? 'high' : 'normal'}">${status}</td>
+      </tr>`
+    ).join('');
+
+    const sexLabel = inp.sex === 'male' ? 'ชาย' : inp.sex === 'female' ? 'หญิง' : '-';
+    const morphLabel = morph.label || morph.conclusion || '-';
+
+    const aiSection = rec.aiAnalysis
+      ? `<div class="ai-section">
+          <div class="ai-title">🤖 ผลวิเคราะห์ AI</div>
+          <div class="ai-text">${rec.aiAnalysis.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>
+        </div>`
+      : '';
+
+    return `
+      <div class="record-card">
+        <div class="record-header">
+          <span class="record-num">รายการที่ ${idx + 1}</span>
+          <span class="record-date">📅 ${rec.displayDate || rec.createdAt || '-'}</span>
+        </div>
+        <div class="patient-info">
+          <span>เพศ: <strong>${sexLabel}</strong></span>
+          <span>อายุ: <strong>${inp.age ?? '-'} ปี</strong></span>
+          <span>สัณฐานวิทยา: <strong>${morphLabel}</strong></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>พารามิเตอร์</th>
+              <th>ค่าที่ได้</th>
+              <th>สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${aiSection}
+      </div>
+    `;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>HemaCalc AI - ประวัติการคำนวณ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Prompt', 'Sarabun', 'TH Sarabun New', sans-serif; font-size: 11pt; color: #1a1a2e; background: #fff; padding: 16px; }
+    .print-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #e11d48; padding-bottom: 12px; }
+    .print-header h1 { font-size: 18pt; color: #e11d48; font-weight: 700; }
+    .print-header p { color: #555; font-size: 10pt; margin-top: 4px; }
+    .record-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+    .record-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .record-num { font-weight: 700; font-size: 11pt; color: #e11d48; }
+    .record-date { font-size: 9pt; color: #64748b; }
+    .patient-info { display: flex; gap: 20px; font-size: 10pt; color: #334155; margin-bottom: 10px; flex-wrap: wrap; }
+    table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 10px; }
+    th { background: #fff1f2; color: #9f1239; font-weight: 600; padding: 6px 10px; text-align: left; border: 1px solid #fecdd3; }
+    td { padding: 5px 10px; border: 1px solid #e2e8f0; }
+    .status-cell.low { color: #0369a1; font-weight: 600; }
+    .status-cell.high { color: #dc2626; font-weight: 600; }
+    .status-cell.normal { color: #16a34a; font-weight: 600; }
+    .ai-section { background: #f8fafc; border-left: 3px solid #6366f1; padding: 10px 12px; border-radius: 4px; }
+    .ai-title { font-weight: 600; color: #4f46e5; margin-bottom: 6px; font-size: 10pt; }
+    .ai-text { font-size: 9.5pt; color: #334155; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .print-footer { text-align: center; margin-top: 24px; font-size: 9pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+      .record-card { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    <h1>🩸 HemaCalc AI — ประวัติการคำนวณ RBC Indices</h1>
+    <p>ส่งออกเมื่อ: ${dateStr} &nbsp;|&nbsp; จำนวนรายการ: ${history.length} รายการ</p>
+  </div>
+
+  <div class="no-print" style="text-align:center;margin-bottom:16px;">
+    <button onclick="window.print()" style="background:#e11d48;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:12pt;cursor:pointer;font-family:inherit;">🖨️ พิมพ์ / บันทึก PDF</button>
+    <button onclick="window.close()" style="background:#64748b;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:12pt;cursor:pointer;font-family:inherit;margin-left:8px;">✖ ปิด</button>
+  </div>
+
+  ${recordsHTML}
+
+  <div class="print-footer">
+    สร้างโดย HemaCalc AI • ใช้สำหรับการศึกษาและสนับสนุนการวินิจฉัยทางคลินิกเท่านั้น
+  </div>
+</body>
+</html>`;
+
+  const printWin = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+  if (!printWin) {
+    alert('กรุณาอนุญาตให้เปิด Popup เพื่อส่งออก PDF');
+    return;
+  }
+  printWin.document.open();
+  printWin.document.write(html);
+  printWin.document.close();
 }
 

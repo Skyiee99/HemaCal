@@ -23,7 +23,7 @@ import {
   updateHistoryAiAnalysis,
   deleteHistoryItem,
   clearAllHistory,
-  exportHistoryAsJSON
+  exportHistoryAsPDF
 } from './history-storage.js';
 import { marked } from 'marked';
 
@@ -303,7 +303,7 @@ function setupEventListeners() {
   if (btnOpenHistory) btnOpenHistory.addEventListener('click', openHistoryModal);
   if (btnCloseHistoryModal) btnCloseHistoryModal.addEventListener('click', closeHistoryModal);
   if (btnCloseHistoryFooter) btnCloseHistoryFooter.addEventListener('click', closeHistoryModal);
-  if (btnExportHistory) btnExportHistory.addEventListener('click', exportHistoryAsJSON);
+  if (btnExportHistory) btnExportHistory.addEventListener('click', exportHistoryAsPDF);
   if (btnClearAllHistory) {
     btnClearAllHistory.addEventListener('click', () => {
       if (confirm('คุณต้องการลบประวัติการคำนวณทั้งหมดออกจากเครื่องใช่หรือไม่?')) {
